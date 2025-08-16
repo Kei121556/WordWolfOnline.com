@@ -56,8 +56,6 @@
                 alert('Please enter your name.');
                 return;
             }
-            // The server will handle room creation on the room page itself
-            // For now, we just generate a random ID on the client side to redirect
             const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
             joinRoom(newRoomId);
         });
