@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Wolf Room</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Socket.IO Client Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <style>
+        /* 基本的なスタイルは index.html と同様 */
+        body { background-color: #111827; color: #f9fafb; font-family: sans-serif; }
+        .card { background-color: #1f2937; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: background-color 0.2s; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background-color: #7c3aed; color: white; }
+        .btn-primary:hover:not(:disabled) { background-color: #6d28d9; }
+        .form-input, .form-select { background-color: #374151; border: 1px solid #4b5563; border-radius: 0.5rem; padding: 0.5rem; width: 100%; }
+        .player-tag { background-color: #374151; padding: 0.25rem 0.75rem; border-radius: 9999px; }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+    
+    <!-- This container will be populated by JavaScript -->
+    <div id="game-container" class="w-full max-w-2xl">
+        <!-- Loading Spinner -->
+        <div id="loading" class="text-center">
+            <p class="text-2xl">Connecting to room...</p>
+        </div>
+    </div>
+
+    <script>
+        // Connect to the Socket.IO server
+        const socket = io();
+
+        const gameContainer = document.getElementById('game-container');
+        const urlParams = new URLSearchParams(window.location.search);
+        const playerName = urlParams.get('name');
+        const roomId = window.location.pathname.split('/')[2];
+
+        let localPlayerId = null;
+
+        // --- UI Templates ---
+        const getWaitingRoomHTML = (room) => {
+            const isHost = room.host_id === localPlayerId;
+            const playersHTML = room.players.map(p => `<span class="player-tag">${p.name} ${p.id === room.host_id ? '👑' : ''}</span>`).join('');
+            
+            return `
+                <div class="card p-6 rounded-lg shadow-lg text-center">
+                    <p class="text-gray-400">Room ID</p>
+                    <div class="bg-gray-900 p-3 rounded-md font-mono text-2xl tracking-widest my-2">${room.id}</div>
+                    <h2 class="text-xl font-bold mt-6 mb-3">Players (${room.players.length})</h2>
+                    <div class="flex flex-wrap justify-center gap-2 mb-6">${playersHTML}</div>
+                    ${isHost ? `
+                        <h3 class="text-lg font-bold mt-6">Game Settings</h3>
+                        <div class="text-left space-y-4 mt-4">
+                            <div>
+                                <label for="wolf-count">Wolf Count</label>
+                                <input id="wolf-count" type="number" class="form-input mt-1" value="${room.settings.wolf_count}" min="1">
+                            </div>
+                            <div>
+                                <label for="topic">Topic</label>
+                                <select id="topic" class="form-select mt-1">
+                                    <option value="food" ${room.settings.topic === 'food' ? 'selected' : ''}>Food</option>
+                                    <option value="places" ${room.settings.topic === 'places' ? 'selected' : ''}>Places</option>
+                                    <option value="actions" ${room.settings.topic === 'actions' ? 'selected' : ''}>Actions</option>
+                                    <option value="custom" ${room.settings.topic === 'custom' ? 'selected' : ''}>Custom</option>
+                                </select>
+                            </div>
+                            <!-- ↓↓↓ ここからがカスタム単語入力フォームです！ ↓↓↓ -->
+                            <div id="custom-topic-area" class="${room.settings.topic === 'custom' ? '' : 'hidden'} mt-4 space-y-2 border-t border-gray-700 pt-4">
+                                <div>
+                                    <label for="citizen-word" class="font-semibold text-blue-400">Citizen Word</label>
+                                    <input id="citizen-word" type="text" class="form-input mt-1" placeholder="e.g., Coffee">
+                                </div>
+                                <div>
+                                    <label for="wolf-word" class="font-semibold text-red-400">Wolf Word</label>
+                                    <input id="wolf-word" type="text" class="form-input mt-1" placeholder="e.g., Tea">
+                                </div>
+                            </div>
+                            <!-- ↑↑↑ ここまでがカスタム単語入力フォームです！ ↑↑↑ -->
+                        </div>
+                        <button id="start-game-btn" class="btn btn-primary w-full mt-6">Start Game</button>
+                    ` : '<p class="text-gray-400 mt-6">Waiting for the host to start the game...</p>'}
+                </div>
+            `;
+        };
+
+        const getRoleAssignmentHTML = (player) => {
+            return `
+                <div class="card p-8 rounded-lg shadow-lg text-center">
+                    <p class="text-gray-400">Your Role</p>
+                    <p class="text-3xl font-bold ${player.role === 'wolf' ? 'text-red-500' : 'text-blue-500'}">${player.role}</p>
+                    <p class="text-gray-400 mt-6">Your Word</p>
+                    <p class="text-4xl font-bold text-violet-400 my-4">${player.word}</p>
+                    <p class="text-gray-400 mt-6">The game will start when everyone is ready.</p>
+                </div>
+            `;
+        };
+        
+        // --- Socket.IO Event Handlers ---
+        
+        socket.on('connect', () => {
+            console.log('Connected to server!');
+            localPlayerId = socket.id;
+            socket.emit('join', { room: roomId, name: playerName });
+        });
+
+        socket.on('room_update', (room) => {
+            console.log('Room data updated:', room);
+            if (room.state === 'waiting') {
+                gameContainer.innerHTML = getWaitingRoomHTML(room);
+                
+                if (room.host_id === localPlayerId) {
+                    // --- ↓↓↓ ここからがイベントリスナーの変更点です！ ↓↓↓ ---
+                    const startGameBtn = document.getElementById('start-game-btn');
+                    const wolfCountInput = document.getElementById('wolf-count');
+                    const topicSelect = document.getElementById('topic');
+                    const customTopicArea = document.getElementById('custom-topic-area');
+                    
+                    // トピック選択でカスタムフォームの表示/非表示を切り替え
+                    topicSelect.addEventListener('change', (e) => {
+                        const isCustom = e.target.value === 'custom';
+                        customTopicArea.classList.toggle('hidden', !isCustom);
+                        socket.emit('update_settings', { room: roomId, settings: { topic: e.target.value } });
+                    });
+
+                    wolfCountInput.addEventListener('change', (e) => {
+                        socket.emit('update_settings', { room: roomId, settings: { wolf_count: parseInt(e.target.value) } });
+                    });
+
+                    // ゲーム開始時にカスタム単語も送信
+                    startGameBtn.addEventListener('click', () => {
+                        const eventData = { room: roomId };
+                        if (topicSelect.value === 'custom') {
+                            const citizenWord = document.getElementById('citizen-word').value.trim();
+                            const wolfWord = document.getElementById('wolf-word').value.trim();
+                            eventData.custom_pair = [citizenWord, wolfWord];
+                        }
+                        socket.emit('start_game', eventData);
+                    });
+                    // --- ↑↑↑ 変更点はここまで ↑↑↑ ---
+                }
+            } else if (room.state === 'role_assignment') {
+                 const me = room.players.find(p => p.id === localPlayerId);
+                 if (me) {
+                    gameContainer.innerHTML = getRoleAssignmentHTML(me);
+                 }
+            }
+        });
+
+        socket.on('error', (data) => {
+            alert(data.message);
+        });
+
+    </script>
+</body>
+</html>
