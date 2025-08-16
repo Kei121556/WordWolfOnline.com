@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word Wolf - Top</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #111827; color: #f9fafb; }
+        .card { background-color: #1f2937; }
+        .btn-primary { background-color: #7c3aed; }
+        .btn-primary:hover { background-color: #6d28d9; }
+        .btn-secondary { background-color: #374151; }
+        .btn-secondary:hover { background-color: #4b5563; }
+        .form-input { background-color: #374151; border: 1px solid #4b5563; }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen">
+    <div class="card p-8 rounded-lg shadow-lg text-center w-full max-w-md">
+        <h1 class="text-4xl font-bold text-violet-400">Word Wolf</h1>
+        <p class="text-gray-400 mt-2 mb-8">The Ultimate Word Finding Game</p>
+
+        <div class="space-y-4">
+            <input type="text" id="player-name-input" class="form-input w-full text-center rounded-md p-2" placeholder="Enter your name">
+            
+            <button id="create-room-btn" class="btn-primary w-full font-bold py-2 px-4 rounded-md">Create Room</button>
+            
+            <div class="flex items-center gap-2">
+                <input type="text" id="join-room-id-input" class="form-input w-full text-center rounded-md p-2" placeholder="Room ID">
+                <button id="join-room-btn" class="btn-secondary font-bold py-2 px-4 rounded-md">Join</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const nameInput = document.getElementById('player-name-input');
+        const createBtn = document.getElementById('create-room-btn');
+        const joinInput = document.getElementById('join-room-id-input');
+        const joinBtn = document.getElementById('join-room-btn');
+
+        // Function to handle joining a room
+        const joinRoom = (roomId) => {
+            const playerName = nameInput.value.trim();
+            if (!playerName) {
+                alert('Please enter your name.');
+                return;
+            }
+            // Redirect to the room page with player name as a query parameter
+            window.location.href = `/room/${roomId}?name=${encodeURIComponent(playerName)}`;
+        };
+
+        // Event listener for creating a room
+        createBtn.addEventListener('click', async () => {
+            const playerName = nameInput.value.trim();
+            if (!playerName) {
+                alert('Please enter your name.');
+                return;
+            }
+            // The server will handle room creation on the room page itself
+            // For now, we just generate a random ID on the client side to redirect
+            const newRoomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+            joinRoom(newRoomId);
+        });
+
+        // Event listener for joining a room
+        joinBtn.addEventListener('click', () => {
+            const roomId = joinInput.value.trim().toUpperCase();
+            if (!roomId) {
+                alert('Please enter a Room ID.');
+                return;
+            }
+            joinRoom(roomId);
+        });
+    </script>
+</body>
+</html>
