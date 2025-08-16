@@ -3,10 +3,8 @@ from flask import Flask, render_template, request
 from flask_socketio import SocketIO, join_room, leave_room, emit
 import random
 
-# Vercelのサーバーレス環境では、非同期モードに`threading`を使用します
 async_mode = "threading"
 
-# プログラムファイル自身の場所を基準に、templatesとstaticフォルダへの絶対パスを生成します。
 base_dir = os.path.dirname(os.path.abspath(__file__))
 template_folder = os.path.join(base_dir, '..', 'templates')
 static_folder = os.path.join(base_dir, '..', 'static')
@@ -14,22 +12,16 @@ static_folder = os.path.join(base_dir, '..', 'static')
 app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
 
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-very-secret-key')
-
-# --- ↓↓↓ ここが最後の修正点です！ ↓↓↓ ---
-# SocketIOが通信する経路(path)を明示的に指定します。
 socketio = SocketIO(app, async_mode=async_mode, path='/socket.io/')
-# --- ↑↑↑ 修正点はここまで ↑↑↑ ---
 
 rooms = {}
 
-# --- お題データ ---
 TOPICS = {
     "food": [["Curry", "Stew"], ["Sushi", "Sashimi"], ["Coffee", "Tea"]],
     "places": [["Tokyo Tower", "Skytree"], ["Ocean", "River"], ["School", "Hospital"]],
     "actions": [["Running", "Jogging"], ["Cooking", "Eating"], ["Sleeping", "Napping"]]
 }
 
-# --- ルーティング ---
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -38,7 +30,6 @@ def index():
 def room(room_id):
     return render_template('room.html')
 
-# --- SocketIOイベントハンドラ ---
 @socketio.on('join')
 def on_join(data):
     room_id = data['room']
@@ -86,11 +77,22 @@ def on_start_game(data):
         emit('error', {'message': 'Invalid player or wolf count.'})
         return
 
+    word_pair = []
+    topic_key = settings.get('topic', 'food')
+
+    if topic_key == 'custom':
+        custom_pair = data.get('custom_pair', [])
+        if len(custom_pair) == 2 and custom_pair[0] and custom_pair[1]:
+            word_pair = custom_pair
+        else:
+            emit('error', {'message': 'Please enter both custom words.'})
+            return
+    else:
+        word_pair = random.choice(TOPICS.get(topic_key, TOPICS['food']))
+
     roles = ['wolf'] * wolf_count + ['citizen'] * (len(players) - wolf_count)
     random.shuffle(roles)
 
-    topic_key = settings.get('topic', 'food')
-    word_pair = random.choice(TOPICS.get(topic_key, TOPICS['food']))
     random.shuffle(word_pair)
     citizen_word, wolf_word = word_pair
 
@@ -121,6 +123,5 @@ def on_disconnect():
             print(f"Player {player_id} disconnected. Room {room_id} updated.")
             break
 
-# Flaskアプリのエントリーポイント
 if __name__ == '__main__':
     socketio.run(app, debug=True)
