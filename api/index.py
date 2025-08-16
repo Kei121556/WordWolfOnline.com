@@ -13,9 +13,12 @@ static_folder = os.path.join(base_dir, '..', 'static')
 
 app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
 
-# NOTE: 秘密鍵は環境変数から読み込むのがベストプラクティスです
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-very-secret-key')
-socketio = SocketIO(app, async_mode=async_mode)
+
+# --- ↓↓↓ ここが最後の修正点です！ ↓↓↓ ---
+# SocketIOが通信する経路(path)を明示的に指定します。
+socketio = SocketIO(app, async_mode=async_mode, path='/socket.io/')
+# --- ↑↑↑ 修正点はここまで ↑↑↑ ---
 
 rooms = {}
 
@@ -83,26 +86,11 @@ def on_start_game(data):
         emit('error', {'message': 'Invalid player or wolf count.'})
         return
 
-    # --- ↓↓↓ ここからがお題選択の変更点です！ ↓↓↓ ---
-    word_pair = []
-    topic_key = settings.get('topic', 'food')
-
-    if topic_key == 'custom':
-        custom_pair = data.get('custom_pair', [])
-        # ホストが入力した単語が2つあるかチェック
-        if len(custom_pair) == 2 and custom_pair[0] and custom_pair[1]:
-            word_pair = custom_pair
-        else:
-            emit('error', {'message': 'Please enter both custom words.'})
-            return
-    else:
-        # 既存のロジック
-        word_pair = random.choice(TOPICS.get(topic_key, TOPICS['food']))
-    # --- ↑↑↑ 変更点はここまで ↑↑↑ ---
-
     roles = ['wolf'] * wolf_count + ['citizen'] * (len(players) - wolf_count)
     random.shuffle(roles)
 
+    topic_key = settings.get('topic', 'food')
+    word_pair = random.choice(TOPICS.get(topic_key, TOPICS['food']))
     random.shuffle(word_pair)
     citizen_word, wolf_word = word_pair
 
